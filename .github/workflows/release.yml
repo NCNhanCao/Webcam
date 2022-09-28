@@ -1,0 +1,68 @@
+name: release
+
+on:
+  push:
+    tags:
+    - 'v*'
+
+jobs:
+  github:
+    runs-on: ubuntu-20.04
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - run: make release
+
+    - uses: actions/create-release@v1
+      id: create_release
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: ${{ github.ref }}
+
+    - uses: actions/github-script@v2
+      env:
+        RELEASE_ID: ${{ steps.create_release.outputs.id }}
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          const fs = require('fs').promises;
+          const { repo: { owner, repo } } = context;
+
+          for (let file of await fs.readdir('./release/')) {
+            await github.repos.uploadReleaseAsset({
+              owner,
+              repo,
+              release_id: process.env.RELEASE_ID,
+              name: file,
+              data: await fs.readFile(`./release/${file}`)
+            });
+          }
+
+  dockerhub:
+    runs-on: ubuntu-20.04
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - run: make dockerhub
+      env:
+        DOCKER_USER: ${{ secrets.DOCKER_USER }}
+        DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+
+  apidocs:
+    runs-on: ubuntu-20.04
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - run: make apidocs-gen
+
+    - run: mv apidocs/*.html apidocs/index.html
+
+    - uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./apidocs
